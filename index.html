@@ -7,7 +7,11 @@
 <meta name="description" content="A retro Nokia-inspired Snake game, reimagined for modern phones.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Snake">
 <meta name="mobile-web-app-capable" content="yes">
+<link id="manifest-link" rel="manifest" href="manifest.json">
+<link id="apple-touch-icon-link" rel="apple-touch-icon" href="apple-touch-icon.png">
+<link id="favicon-link" rel="icon" href="icon-192.png">
 <title>Snake :: Retro Reimagined</title>
 <style>
 /* ============================================================
@@ -720,6 +724,39 @@ ul{ margin:0; padding:0; list-style:none; }
 .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
 /* ============================================================
+   PROACTIVE INSTALL BANNER
+   ============================================================ */
+.install-banner{
+  position:fixed; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom,0));
+  max-width:456px; margin:0 auto;
+  background:#181b22; color:var(--paper);
+  border-radius:16px; padding:10px 10px 10px 12px;
+  display:flex; align-items:center; gap:10px;
+  box-shadow:0 14px 34px rgba(0,0,0,.5);
+  z-index:55;
+  transition:transform .3s cubic-bezier(.2,.8,.25,1), opacity .3s ease;
+}
+.install-banner.hidden{ transform:translateY(140%); opacity:0; pointer-events:none; }
+.ib-icon{
+  flex:0 0 auto; width:36px; height:36px; border-radius:10px;
+  background:#1c2b16; display:flex; align-items:center; justify-content:center;
+}
+.ib-icon .pixel-text{ --pdot:2.6px; --pgap:2px; }
+.ib-icon .pixel-dot.on{ background:#c9dba0; }
+.ib-text{ flex:1 1 auto; display:flex; flex-direction:column; gap:1px; min-width:0; }
+.ib-text strong{ font-size:12.5px; font-weight:700; }
+.ib-text span{ font-size:10.5px; color:rgba(238,240,230,.55); }
+.ib-install{
+  flex:0 0 auto; background:#6fd3ff; color:#0c0f0b; font-weight:700; font-size:12.5px;
+  padding:9px 14px; border-radius:9px;
+}
+.ib-close{
+  flex:0 0 auto; width:26px; height:26px; border-radius:50%;
+  background:rgba(255,255,255,.08); color:var(--paper); font-size:11px;
+  display:flex; align-items:center; justify-content:center;
+}
+
+/* ============================================================
    RESPONSIVE
    ============================================================ */
 @media (max-height:760px){
@@ -957,6 +994,17 @@ ul{ margin:0; padding:0; list-style:none; }
 
   <div class="toast" id="toast"></div>
 
+  <!-- PROACTIVE INSTALL BANNER -->
+  <div class="install-banner hidden" id="install-banner" role="region" aria-label="Install app">
+    <div class="ib-icon" aria-hidden="true"><div class="pixel-text" id="ib-icon-glyph"></div></div>
+    <div class="ib-text">
+      <strong id="ib-title">Add Snake to your phone</strong>
+      <span id="ib-sub">Play full-screen, just like a real app</span>
+    </div>
+    <button class="ib-install" id="ib-install-btn">Install</button>
+    <button class="ib-close" id="ib-close-btn" aria-label="Dismiss">✕</button>
+  </div>
+
 </div>
 
 <script>
@@ -1086,6 +1134,153 @@ function fitPixelText(el, text, maxWidthPx, maxDot){
 }
 
 /* ============================================================
+   SECTION: PWA INSTALLABILITY (manifest + icons + service worker)
+   ------------------------------------------------------------
+   A browser will only offer a real "Install app" prompt if the page
+   exposes a valid Web App Manifest (name, icons, start_url, display)
+   and is served from a secure context (https:// or localhost — never
+   file://, by browser design, no workaround exists for that part).
+   Since this must stay one HTML file, everything below is generated
+   in memory and attached via Blob/data URLs instead of separate
+   manifest.json / sw.js / icon files.
+   ============================================================ */
+function pathRoundRect(c,x,y,w,h,r){
+  c.beginPath();
+  c.moveTo(x+r,y);
+  c.arcTo(x+w,y,x+w,y+h,r);
+  c.arcTo(x+w,y+h,x,y+h,r);
+  c.arcTo(x,y+h,x,y,r);
+  c.arcTo(x,y,x+w,y,r);
+  c.closePath();
+}
+
+// Renders the same dot-matrix "S" used throughout the UI onto a canvas,
+// so the home-screen icon matches the in-app brand exactly.
+function drawAppIcon(size, opts){
+  opts = opts || {};
+  const maskable = !!opts.maskable;
+  const bg = opts.bg || "#1c2b16";
+  const fg = opts.fg || "#c9dba0";
+  const c = document.createElement("canvas");
+  c.width = size; c.height = size;
+  const cx = c.getContext("2d");
+
+  cx.fillStyle = bg;
+  if(maskable){
+    cx.fillRect(0,0,size,size); // maskable icons must fill edge-to-edge; OS applies its own mask shape
+  }else{
+    pathRoundRect(cx, 0,0,size,size, size*0.22);
+    cx.fill();
+  }
+
+  const safe = size * (maskable ? 0.5 : 0.62); // maskable needs a bigger safe-zone margin
+  const rows = FONT5x7["S"];
+  const dotSize = Math.min(safe/5, safe/7);
+  const glyphW = dotSize*5, glyphH = dotSize*7;
+  const startX = (size-glyphW)/2, startY = (size-glyphH)/2;
+  cx.fillStyle = fg;
+  for(let r=0;r<7;r++){
+    for(let col=0; col<5; col++){
+      if(rows[r][col] === "#"){
+        const x = startX + col*dotSize, y = startY + r*dotSize;
+        const pad = dotSize*0.12;
+        pathRoundRect(cx, x+pad, y+pad, dotSize-pad*2, dotSize-pad*2, dotSize*0.22);
+        cx.fill();
+      }
+    }
+  }
+  return c.toDataURL("image/png");
+}
+
+// Fallback only: generates everything in memory when the real icon files
+// below aren't sitting next to this HTML file (e.g. it was shared/opened on
+// its own). When present, the real files always win — see verifyInstallAssets().
+function setupInstallAssets(){
+  try{
+    const icon192 = drawAppIcon(192, { maskable:false });
+    const icon512 = drawAppIcon(512, { maskable:false });
+    const iconMaskable = drawAppIcon(512, { maskable:true });
+    const appleIcon = drawAppIcon(180, { maskable:false });
+
+    const manifest = {
+      name: "Snake: Retro Reimagined",
+      short_name: "Snake",
+      description: "A retro Nokia-inspired Snake game, reimagined for modern phones.",
+      start_url: location.href,
+      scope: new URL(".", location.href).href,
+      display: "standalone",
+      orientation: "portrait",
+      background_color: "#10140f",
+      theme_color: "#10140f",
+      icons: [
+        { src: icon192, sizes: "192x192", type: "image/png", purpose: "any" },
+        { src: icon512, sizes: "512x512", type: "image/png", purpose: "any" },
+        { src: iconMaskable, sizes: "512x512", type: "image/png", purpose: "maskable" }
+      ]
+    };
+    const manifestURL = URL.createObjectURL(
+      new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" })
+    );
+
+    const manifestLink = document.getElementById("manifest-link");
+    if(manifestLink) manifestLink.href = manifestURL;
+
+    const appleLink = document.getElementById("apple-touch-icon-link");
+    if(appleLink) appleLink.href = appleIcon;
+
+    const favicon = document.getElementById("favicon-link");
+    if(favicon) favicon.href = icon192;
+  }catch(err){
+    // Canvas/Blob generation failed (very old or locked-down browser) — the game
+    // still works fully, the page simply won't be offered as an installable app.
+  }
+}
+
+// The <link rel="manifest" href="manifest.json"> in <head> already points at the
+// real file — browsers fetch that natively the moment they parse <head>, which is
+// earlier than any JS could act anyway. This just double-checks that fetch will
+// actually succeed (it won't under file://, or if the PNGs/manifest.json weren't
+// kept alongside this HTML), and only then falls back to generating everything
+// inline so installability still works for a lone, unaccompanied HTML file.
+function verifyInstallAssets(){
+  fetch("manifest.json", { cache:"no-store" })
+    .then(res => { if(!res.ok) throw new Error("manifest.json missing"); })
+    .catch(() => setupInstallAssets());
+}
+
+// Optional but recommended for installability + lets the page reload from cache
+// once installed. Tries the real sw.js first; if that's missing (lone HTML file)
+// or registration fails for any reason, falls back to an inline, in-memory
+// service worker so offline caching still works either way.
+function registerServiceWorker(){
+  if(!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.register("sw.js", { scope:"./" }).catch(registerInlineServiceWorker);
+}
+
+function registerInlineServiceWorker(){
+  const swSource =
+    'const CACHE = "snake-retro-v1";' +
+    'self.addEventListener("install", e => self.skipWaiting());' +
+    'self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));' +
+    'self.addEventListener("fetch", e => {' +
+    '  if(e.request.method !== "GET") return;' +
+    '  e.respondWith(' +
+    '    caches.open(CACHE).then(cache => cache.match(e.request).then(cached => {' +
+    '      const network = fetch(e.request).then(res => { cache.put(e.request, res.clone()); return res; }).catch(() => cached);' +
+    '      return cached || network;' +
+    '    }))' +
+    '  );' +
+    '});';
+  try{
+    const swURL = URL.createObjectURL(new Blob([swSource], { type:"text/javascript" }));
+    navigator.serviceWorker.register(swURL, { scope: "./" }).catch(()=>{});
+  }catch(err){ /* best-effort only — see comment above */ }
+}
+
+verifyInstallAssets();
+registerServiceWorker();
+
+/* ============================================================
    SECTION: DEVICE / INSTALL DETECTION
    ============================================================ */
 function detectDevice(){
@@ -1097,17 +1292,20 @@ function detectDevice(){
 }
 
 // Chromium/Android browsers fire this when the page qualifies for installation.
-// We stash the event so we can trigger the native prompt later, from our own button.
+// We stash the event so we can trigger the native prompt later, AND proactively
+// surface a banner instead of waiting for someone to find a button in Settings.
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault();
   state.deferredInstallPrompt = e;
   refreshInstallUI();
+  showInstallBanner("android");
 });
 
 window.addEventListener("appinstalled", () => {
   state.deferredInstallPrompt = null;
   state.isStandalone = true;
   refreshInstallUI();
+  hideInstallBanner();
   showToast("Snake installed — find it on your home screen");
 });
 
@@ -1117,13 +1315,32 @@ function refreshInstallUI(){
   if(state.isStandalone){
     if(drawerBtn) drawerBtn.style.display = "none";
     if(statusRow) statusRow.style.display = "flex";
+    hideInstallBanner();
   }else{
     if(drawerBtn) drawerBtn.style.display = "block";
     if(statusRow) statusRow.style.display = "none";
   }
 }
 
+let installBannerDismissed = false;
+function showInstallBanner(kind){
+  if(state.isStandalone || installBannerDismissed) return;
+  const sub = document.getElementById("ib-sub");
+  if(sub){
+    sub.textContent = kind === "ios"
+      ? "Tap Install, then follow two quick steps"
+      : "Play full-screen, just like a real app";
+  }
+  const banner = document.getElementById("install-banner");
+  if(banner) banner.classList.remove("hidden");
+}
+function hideInstallBanner(){
+  const banner = document.getElementById("install-banner");
+  if(banner) banner.classList.add("hidden");
+}
+
 async function triggerInstall(){
+  hideInstallBanner();
   // Path 1: a real, browser-supported install prompt is available (Chromium/Android/desktop).
   if(state.deferredInstallPrompt){
     state.deferredInstallPrompt.prompt();
@@ -1152,6 +1369,7 @@ async function triggerInstall(){
 }
 
 function openInstallModal(kind){
+  hideInstallBanner();
   const modal = document.getElementById("install-modal");
   const body = document.getElementById("install-modal-body");
   if(kind === "ios"){
@@ -1693,6 +1911,7 @@ function openDrawer(){
   document.getElementById("settings-drawer").classList.add("open");
   document.getElementById("backdrop").classList.remove("hidden");
   document.getElementById("settings-drawer").setAttribute("aria-hidden","false");
+  hideInstallBanner();
   if(game.started && game.alive && !game.paused) togglePause();
 }
 function closeDrawer(){
@@ -1759,6 +1978,12 @@ document.getElementById("backdrop").addEventListener("click", closeDrawer);
 document.getElementById("btn-install-drawer").addEventListener("click", triggerInstall);
 document.getElementById("btn-install-menu").addEventListener("click", triggerInstall);
 document.getElementById("btn-install-modern").addEventListener("click", triggerInstall);
+document.getElementById("ib-install-btn").addEventListener("click", () => { sfxKey(); triggerInstall(); });
+document.getElementById("ib-close-btn").addEventListener("click", () => {
+  sfxKey();
+  installBannerDismissed = true;
+  hideInstallBanner();
+});
 document.getElementById("btn-close-install").addEventListener("click", closeInstallModal);
 document.getElementById("install-modal-backdrop").addEventListener("click", closeInstallModal);
 
@@ -1795,8 +2020,13 @@ function init(){
   setViewportHeight();
   applySettingsToDOM();
   refreshInstallUI();
+  renderPixelText(document.getElementById("ib-icon-glyph"), "S");
   if(state.isStandalone){
     document.getElementById("btn-install-drawer").style.display = "none";
+  }else if(state.isIOS){
+    // iOS Safari never fires beforeinstallprompt, so this is the only proactive
+    // nudge it gets — shown once the boot/menu moment has passed, not instantly.
+    setTimeout(() => showInstallBanner("ios"), 2600);
   }
   runBootSequence();
   requestAnimationFrame(resizeCanvas);
