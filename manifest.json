@@ -2,7 +2,7 @@
   "name": "Snake: Retro Reimagined",
   "short_name": "Snake",
   "description": "A retro Nokia-inspired Snake game, reimagined for modern phones.",
-  "start_url": "./snake-nokia-retro.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
