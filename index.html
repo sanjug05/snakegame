@@ -387,20 +387,55 @@ ul{ margin:0; padding:0; list-style:none; }
 .menu-icon-grid{ --pdot:5px; --pgap:4px; }
 .menu-icon .pixel-dot.on{ background:var(--lcd-bg); }
 
-.cta-button{
+.menu-heading{
   font-family:var(--font-mono);
+  font-size:12px;
   font-weight:700;
-  font-size:13px;
-  letter-spacing:.12em;
+  letter-spacing:.2em;
   text-transform:uppercase;
-  color:var(--lcd-bg);
-  background:var(--lcd-fg);
-  padding:13px 26px;
-  border-radius:10px;
-  box-shadow:0 6px 0 var(--lcd-fg-dim), 0 10px 18px rgba(0,0,0,.25);
-  transition:transform .12s ease, box-shadow .12s ease;
+  color:var(--lcd-fg-dim);
 }
-.cta-button:active{ transform:translateY(4px); box-shadow:0 2px 0 var(--lcd-fg-dim), 0 4px 10px rgba(0,0,0,.2); }
+
+.game-select-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px;
+  width:100%;
+  max-width:280px;
+}
+.game-card{
+  display:flex; flex-direction:column; align-items:center; gap:8px;
+  padding:16px 10px 14px;
+  border-radius:14px;
+  background:rgba(0,0,0,.05);
+  box-shadow:0 0 0 1px var(--lcd-grid), 0 6px 14px rgba(0,0,0,.08);
+  transition:transform .12s ease, background .12s ease;
+}
+.game-card:active{ transform:translateY(3px) scale(.98); background:rgba(0,0,0,.1); }
+.game-card strong{
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  font-weight:700;
+  letter-spacing:.04em;
+  color:var(--lcd-fg);
+  text-align:center;
+}
+.game-card span{
+  font-family:var(--font-mono);
+  font-size:9px;
+  color:var(--lcd-fg-dim);
+  letter-spacing:.04em;
+  text-align:center;
+}
+.game-card-icon{
+  width:52px; height:52px;
+  border-radius:14px;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--lcd-fg);
+  box-shadow:0 5px 12px var(--lcd-fg-dim);
+}
+.game-card-icon .pixel-text{ --pdot:4px; --pgap:3px; }
+.game-card-icon .pixel-dot.on{ background:var(--lcd-bg); }
 
 .menu-sub{
   font-family:var(--font-mono);
@@ -685,6 +720,12 @@ ul{ margin:0; padding:0; list-style:none; }
   width:100%; padding:12px; border-radius:12px; background:rgba(255,255,255,.08); color:var(--paper);
   font-weight:600; font-size:13px; margin-top:8px;
 }
+.btn-ghost-inline{
+  width:auto; margin-top:0; padding:9px 14px; font-size:12px; flex:0 0 auto;
+}
+
+/* Snake-only settings (wall wrap doesn't apply to BrickBoy Neo) */
+#app[data-game="brickboy"] .only-snake{ display:none; }
 
 /* ============================================================
    INSTALL MODAL
@@ -824,11 +865,22 @@ ul{ margin:0; padding:0; list-style:none; }
             <p class="boot-hint">tap to continue</p>
           </section>
 
-          <!-- MENU / HOME SCREEN -->
-          <section id="screen-menu" class="screen" aria-label="Home menu">
-            <div class="menu-icon"><div class="pixel-text menu-icon-grid" id="menu-icon"></div></div>
-            <button class="cta-button" id="btn-play">▶ Play Snake</button>
-            <p class="menu-sub">swipe, tap or use the keys to steer once you begin</p>
+          <!-- MENU / HOME SCREEN (game select) -->
+          <section id="screen-menu" class="screen" aria-label="Select a game">
+            <h2 class="menu-heading">Select Game</h2>
+            <div class="game-select-grid">
+              <button class="game-card" id="card-snake" data-game="snake">
+                <div class="game-card-icon"><div class="pixel-text" id="card-snake-glyph"></div></div>
+                <strong>Snake</strong>
+                <span>Classic grid chase</span>
+              </button>
+              <button class="game-card" id="card-brickboy" data-game="brickboy">
+                <div class="game-card-icon"><div class="pixel-text" id="card-brickboy-glyph"></div></div>
+                <strong>BrickBoy Neo</strong>
+                <span>Break every brick</span>
+              </button>
+            </div>
+            <p class="menu-sub">swipe, tap or use the keys to play once you begin</p>
             <div class="menu-footer">
               <button class="icon-btn" id="btn-settings-menu" aria-label="Open settings">⚙</button>
               <button class="icon-btn" id="btn-install-menu" aria-label="Install app">⇩</button>
@@ -836,7 +888,7 @@ ul{ margin:0; padding:0; list-style:none; }
           </section>
 
           <!-- GAME SCREEN -->
-          <section id="screen-game" class="screen" aria-label="Snake game">
+          <section id="screen-game" class="screen" aria-label="Game">
             <div class="lcd-hud">
               <div class="hud-block">
                 <span class="hud-label">Score</span>
@@ -859,7 +911,7 @@ ul{ margin:0; padding:0; list-style:none; }
 
               <div class="lcd-overlay" id="overlay-start">
                 <div class="pixel-text ov-title" style="--pdot:5px;--pgap:4px;" id="ov-start-title"></div>
-                <p class="ov-hint">tap or press a key to start</p>
+                <p class="ov-hint" id="start-hint">tap or press a key to start</p>
               </div>
 
               <div class="lcd-overlay hidden" id="overlay-pause">
@@ -914,6 +966,14 @@ ul{ margin:0; padding:0; list-style:none; }
     <div class="drawer-content">
 
       <div class="set-section">
+        <h3>Game</h3>
+        <div class="set-row">
+          <div><span class="set-label">Now playing</span><div class="set-sub" id="now-playing-sub">Snake</div></div>
+          <button class="btn-ghost btn-ghost-inline" id="btn-switch-game">Switch Game</button>
+        </div>
+      </div>
+
+      <div class="set-section">
         <h3>Display</h3>
         <div class="set-row">
           <div><span class="set-label">Phone shell</span><div class="set-sub">Show the retro phone frame</div></div>
@@ -964,6 +1024,10 @@ ul{ margin:0; padding:0; list-style:none; }
             <button data-speed="fast" aria-pressed="false">Fast</button>
           </div>
         </div>
+        <div class="set-row only-snake">
+          <div><span class="set-label">Pass through walls</span><div class="set-sub">Wrap to the other side instead of crashing</div></div>
+          <button class="switch" id="toggle-wallwrap" role="switch" aria-checked="false" aria-label="Toggle wall wrap"></button>
+        </div>
       </div>
 
       <div class="set-section">
@@ -976,8 +1040,8 @@ ul{ margin:0; padding:0; list-style:none; }
 
       <div class="set-section">
         <h3>About</h3>
-        <p class="about-copy">Snake: Retro Reimagined brings the pocket-sized obsession of old monochrome phones back, polished for the glass slab in your hand today.</p>
-        <p class="about-copy">No accounts, no trackers, no downloads beyond this page. Just the click of a keypad and a snake that never stops growing.</p>
+        <p class="about-copy">Two pocket-sized obsessions from old monochrome phones, brought back and polished for the glass slab in your hand today: Snake, and BrickBoy Neo.</p>
+        <p class="about-copy">No accounts, no trackers, no downloads beyond this page. Just the click of a keypad and a high score worth chasing.</p>
       </div>
 
     </div>
@@ -1023,7 +1087,8 @@ const defaultSettings = {
   sound: true,
   vibration: true,
   smooth: true,
-  speed: "normal"
+  speed: "normal",
+  wallWrap: false
 };
 
 function loadSettings(){
@@ -1047,7 +1112,8 @@ function saveSettings(s){
 const state = {
   settings: loadSettings(),
   screen: "boot",
-  highScore: 0,           // session-only, intentionally not persisted
+  currentGame: "snake",   // "snake" | "brickboy" — which game is active/selected
+  highScore: { snake: 0, brickboy: 0 },  // session-only, intentionally not persisted, kept per game
   drawerOpen: false,
   deferredInstallPrompt: null,
   isStandalone: false,
@@ -1058,6 +1124,21 @@ const state = {
 
 const SPEED_MS = { slow: 165, normal: 122, fast: 88 };
 const COLS = 15, ROWS = 21;
+
+// BrickBoy Neo tuning — speeds in grid cells/second (continuous motion, not tick-based)
+const BALL_SPEED = { slow: 7.5, normal: 9.5, fast: 12 };
+const PADDLE_SPEED = { slow: 9, normal: 10.5, fast: 12.5 };
+const BRICK_COLS = 8;
+const BRICK_ROW_H = 0.85;
+const BRICK_ROW_GAP = 0.14;
+const BRICK_COL_GAP = 0.12;
+const BRICK_TOP = 1.6;
+const BALL_R = 0.32;
+const PADDLE_H = 0.55;
+const PADDLE_W = 3;
+
+// held-direction state for BrickBoy's paddle (continuous movement while a key/button is down)
+const heldDirs = { left:false, right:false };
 
 /* ============================================================
    SECTION: PIXEL / DOT-MATRIX FONT (5x7) — avoids any external font file
@@ -1475,11 +1556,13 @@ function applySettingsToDOM(){
   app.dataset.shell = s.shell;
   app.dataset.lcd = s.lcd;
   app.dataset.anim = s.smooth ? "true" : "false";
+  app.dataset.game = state.currentGame;
 
   document.getElementById("toggle-shell").setAttribute("aria-checked", String(s.shellOn));
   document.getElementById("toggle-sound").setAttribute("aria-checked", String(s.sound));
   document.getElementById("toggle-vibration").setAttribute("aria-checked", String(s.vibration));
   document.getElementById("toggle-smooth").setAttribute("aria-checked", String(s.smooth));
+  document.getElementById("toggle-wallwrap").setAttribute("aria-checked", String(s.wallWrap));
 
   document.querySelectorAll("#shell-pick-row .shell-pick").forEach(btn=>{
     btn.setAttribute("aria-pressed", String(btn.dataset.shell === s.shell));
@@ -1490,6 +1573,9 @@ function applySettingsToDOM(){
   document.querySelectorAll("#speed-seg button").forEach(btn=>{
     btn.setAttribute("aria-pressed", String(btn.dataset.speed === s.speed));
   });
+
+  const nowPlaying = document.getElementById("now-playing-sub");
+  if(nowPlaying) nowPlaying.textContent = state.currentGame === "brickboy" ? "BrickBoy Neo" : "Snake";
 }
 
 /* ============================================================
@@ -1499,7 +1585,8 @@ let bootAdvanced = false;
 function runBootSequence(){
   renderPixelText(document.getElementById("boot-logo"), "S");
   renderPixelText(document.getElementById("boot-title"), "SNAKE");
-  renderPixelText(document.getElementById("menu-icon"), "S");
+  renderPixelText(document.getElementById("card-snake-glyph"), "S");
+  renderPixelText(document.getElementById("card-brickboy-glyph"), "B");
   updateClock();
   setInterval(updateClock, 15000);
 
@@ -1627,9 +1714,16 @@ function stepGame(){
   const head = game.snake[0];
   const newHead = { x: head.x + game.dir.x, y: head.y + game.dir.y };
 
-  if(newHead.x < 0 || newHead.x >= COLS || newHead.y < 0 || newHead.y >= ROWS){
+  if(state.settings.wallWrap){
+    // "play without box" — pass through an edge and reappear on the opposite side.
+    if(newHead.x < 0) newHead.x = COLS - 1;
+    else if(newHead.x >= COLS) newHead.x = 0;
+    if(newHead.y < 0) newHead.y = ROWS - 1;
+    else if(newHead.y >= ROWS) newHead.y = 0;
+  }else if(newHead.x < 0 || newHead.x >= COLS || newHead.y < 0 || newHead.y >= ROWS){
     return gameOver();
   }
+
   for(let i=0;i<game.snake.length;i++){
     if(game.snake[i].x === newHead.x && game.snake[i].y === newHead.y) return gameOver();
   }
@@ -1650,26 +1744,33 @@ function stepGame(){
   game.tickInterval = currentTickInterval();
 }
 
+function activeRuntime(){
+  return state.currentGame === "brickboy" ? brick : game;
+}
+
 function gameOver(){
-  game.alive = false;
-  game.started = false;
+  const s = activeRuntime();
+  s.alive = false;
+  s.started = false;
   sfxOver();
   vibrate([60,40,60]);
-  if(game.score > state.highScore){
-    state.highScore = game.score;
+  if(s.score > state.highScore[state.currentGame]){
+    state.highScore[state.currentGame] = s.score;
   }
   const overW = document.getElementById("overlay-gameover").clientWidth - 40;
   fitPixelText(document.getElementById("ov-over-title"), "GAME OVER", overW, 6);
-  fitPixelText(document.getElementById("ov-over-score"), "SCORE " + game.score, overW, 4.2);
-  fitPixelText(document.getElementById("ov-over-best"), "BEST " + state.highScore, overW, 4.2);
+  fitPixelText(document.getElementById("ov-over-score"), "SCORE " + s.score, overW, 4.2);
+  fitPixelText(document.getElementById("ov-over-best"), "BEST " + state.highScore[state.currentGame], overW, 4.2);
   document.getElementById("overlay-gameover").classList.remove("hidden");
   document.getElementById("overlay-pause").classList.add("hidden");
   updateHUD();
 }
 
 function updateHUD(){
-  fitPixelText(document.getElementById("hud-score"), String(game.score), 92, 3.6);
-  fitPixelText(document.getElementById("hud-high"), String(Math.max(state.highScore, game.score)), 92, 3.6);
+  const s = activeRuntime();
+  const best = Math.max(state.highScore[state.currentGame], s.score);
+  fitPixelText(document.getElementById("hud-score"), String(s.score), 92, 3.6);
+  fitPixelText(document.getElementById("hud-high"), String(best), 92, 3.6);
 }
 
 /* ---- main loop: fixed-step logic, rendered every animation frame ---- */
@@ -1681,6 +1782,12 @@ function loop(ts){
   lastFrameTime = ts;
   if(dt > 250) dt = 250; // clamp huge gaps (tab backgrounded etc.)
 
+  if(state.screen !== "game") return;
+  if(state.currentGame === "brickboy") updateBrickBoy(dt);
+  else updateSnakeFrame(dt);
+}
+
+function updateSnakeFrame(dt){
   if(game.started && game.alive && !game.paused){
     game.tickAcc += dt;
     while(game.tickAcc >= game.tickInterval){
@@ -1689,7 +1796,6 @@ function loop(ts){
       if(!game.alive) break;
     }
   }
-
   const alpha = state.settings.smooth
     ? Math.min(game.tickAcc / game.tickInterval, 1)
     : 1;
@@ -1697,15 +1803,17 @@ function loop(ts){
 }
 
 /* ============================================================
-   SECTION: CANVAS RENDERER
+   SECTION: CANVAS RENDERER (shared by both games)
    ============================================================ */
 function lerp(a,b,t){ return a + (b-a) * t; }
 
-function renderFrame(alpha){
-  if(canvas.width === 0 || canvas.height === 0) return;
+// Clears (with retro LCD ghosting) and draws the faint cell grid. Returns false
+// if the canvas isn't ready to draw into yet. Shared by Snake and BrickBoy Neo
+// so both games sit on the exact same LCD-screen look.
+function clearLCD(){
+  if(canvas.width === 0 || canvas.height === 0) return false;
   const styles = getComputedStyle(document.getElementById("device-screen"));
   const bg = styles.getPropertyValue("--lcd-bg-deep").trim() || "#b3c28d";
-  const fg = styles.getPropertyValue("--lcd-fg").trim() || "#2b3a20";
   const grid = styles.getPropertyValue("--lcd-grid").trim() || "rgba(0,0,0,.07)";
 
   // Subtle ghosting: don't fully clear — leave a faint trace of the previous frame,
@@ -1720,7 +1828,6 @@ function renderFrame(alpha){
     ctx.globalAlpha = 1;
   }
 
-  // faint grid texture
   ctx.strokeStyle = grid;
   ctx.lineWidth = Math.max(1, cellSize * 0.04);
   ctx.beginPath();
@@ -1733,6 +1840,13 @@ function renderFrame(alpha){
     ctx.moveTo(0,y); ctx.lineTo(canvas.width,y);
   }
   ctx.stroke();
+  return true;
+}
+
+function renderFrame(alpha){
+  if(!clearLCD()) return;
+  const styles = getComputedStyle(document.getElementById("device-screen"));
+  const fg = styles.getPropertyValue("--lcd-fg").trim() || "#2b3a20";
 
   if(!game.snake.length) return;
 
@@ -1743,12 +1857,17 @@ function renderFrame(alpha){
   roundRect(fx+pad, fy+pad, cellSize-pad*2, cellSize-pad*2, cellSize*0.25);
   ctx.fill();
 
-  // snake — interpolated between previous and current grid step when smooth animation is on
+  // snake — interpolated between previous and current grid step when smooth animation is on.
+  // A jump of more than one cell on either axis can only mean a wall-wrap teleport, not a
+  // normal move — in that case we snap instead of interpolating, to avoid a long visual
+  // streak sliding across the whole board.
   for(let i = game.snake.length - 1; i >= 0; i--){
     const cur = game.snake[i];
     const prev = game.prevSnake[i] || cur;
-    const dx = lerp(prev.x, cur.x, alpha);
-    const dy = lerp(prev.y, cur.y, alpha);
+    const wrappedX = Math.abs(cur.x - prev.x) > 1;
+    const wrappedY = Math.abs(cur.y - prev.y) > 1;
+    const dx = wrappedX ? cur.x : lerp(prev.x, cur.x, alpha);
+    const dy = wrappedY ? cur.y : lerp(prev.y, cur.y, alpha);
     const x = dx * cellSize, y = dy * cellSize;
     const inset = i === 0 ? cellSize * 0.06 : cellSize * 0.12;
     ctx.fillStyle = fg;
@@ -1770,42 +1889,271 @@ function roundRect(x,y,w,h,r){
 }
 
 /* ============================================================
+   SECTION: BRICKBOY NEO — a second game living on the same LCD
+   ------------------------------------------------------------
+   Continuous (non-grid-locked) Breakout-style physics: a paddle the
+   player steers left/right, a ball that bounces off walls, the paddle,
+   and bricks, and an endless level progression once a board clears.
+   ============================================================ */
+const brick = {
+  paddleX: 0, paddleY: 0, paddleW: PADDLE_W,
+  ballX: 0, ballY: 0, ballVX: 0, ballVY: 0,
+  stuck: true,
+  bricks: [],
+  score: 0,
+  lives: 3,
+  level: 1,
+  alive: false,
+  started: false,
+  paused: false
+};
+
+function currentBallSpeed(){
+  const base = BALL_SPEED[state.settings.speed] || BALL_SPEED.normal;
+  return base * (1 + (brick.level - 1) * 0.06);
+}
+function currentPaddleSpeed(){
+  return PADDLE_SPEED[state.settings.speed] || PADDLE_SPEED.normal;
+}
+
+function generateBricks(){
+  brick.bricks = [];
+  const rows = Math.min(4 + brick.level, 7);
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<BRICK_COLS;c++){
+      brick.bricks.push({ row:r, col:c, alive:true });
+    }
+  }
+}
+
+function brickRect(b){
+  const w = COLS / BRICK_COLS;
+  return {
+    x: b.col*w + BRICK_COL_GAP/2,
+    y: BRICK_TOP + b.row*(BRICK_ROW_H+BRICK_ROW_GAP),
+    w: w - BRICK_COL_GAP,
+    h: BRICK_ROW_H
+  };
+}
+
+function placeBallOnPaddle(){
+  brick.ballX = brick.paddleX + brick.paddleW/2;
+  brick.ballY = brick.paddleY - BALL_R - 0.04;
+  brick.ballVX = 0; brick.ballVY = 0;
+  brick.stuck = true;
+}
+
+function resetBrickBoy(){
+  brick.paddleW = PADDLE_W;
+  brick.paddleX = COLS/2 - brick.paddleW/2;
+  brick.paddleY = ROWS - 1.4;
+  brick.lives = 3;
+  brick.level = 1;
+  brick.score = 0;
+  brick.alive = true;
+  brick.started = false;
+  brick.paused = false;
+  generateBricks();
+  placeBallOnPaddle();
+  updateHUD();
+}
+
+function launchBall(){
+  const speed = currentBallSpeed();
+  const maxAngle = Math.PI/3.4; // ~53 degrees either side of straight up
+  const angle = (Math.random()*2 - 1) * maxAngle;
+  brick.ballVX = speed * Math.sin(angle);
+  brick.ballVY = -speed * Math.cos(angle);
+  brick.stuck = false;
+  brick.started = true;
+}
+
+function findBrickHit(x,y,r){
+  for(let i=0;i<brick.bricks.length;i++){
+    const b = brick.bricks[i];
+    if(!b.alive) continue;
+    const rect = brickRect(b);
+    if(x+r > rect.x && x-r < rect.x+rect.w && y+r > rect.y && y-r < rect.y+rect.h){
+      return b;
+    }
+  }
+  return null;
+}
+
+function loseLife(){
+  brick.lives--;
+  vibrate([40,30,40]);
+  if(brick.lives <= 0){
+    gameOver();
+  }else{
+    showToast("Ball lost — " + brick.lives + " " + (brick.lives === 1 ? "life" : "lives") + " left");
+    placeBallOnPaddle();
+    updateHUD();
+    document.getElementById("overlay-start").classList.remove("hidden");
+  }
+}
+
+function levelUp(){
+  brick.level++;
+  generateBricks();
+  placeBallOnPaddle();
+  showToast("Level " + brick.level + "!");
+  updateHUD();
+  document.getElementById("overlay-start").classList.remove("hidden");
+}
+
+function stepBallPhysics(dtS){
+  let x = brick.ballX + brick.ballVX*dtS;
+  let y = brick.ballY + brick.ballVY*dtS;
+  const r = BALL_R;
+
+  if(x - r < 0){ x = r; brick.ballVX = Math.abs(brick.ballVX); sfxKey(); }
+  else if(x + r > COLS){ x = COLS - r; brick.ballVX = -Math.abs(brick.ballVX); sfxKey(); }
+  if(y - r < 0){ y = r; brick.ballVY = Math.abs(brick.ballVY); sfxKey(); }
+
+  // paddle
+  if(brick.ballVY > 0 &&
+     y + r >= brick.paddleY && y - r <= brick.paddleY + PADDLE_H &&
+     x + r >= brick.paddleX && x - r <= brick.paddleX + brick.paddleW){
+    y = brick.paddleY - r;
+    const hitPos = Math.max(-1, Math.min(1, ((x - brick.paddleX) / brick.paddleW) * 2 - 1));
+    const speed = Math.hypot(brick.ballVX, brick.ballVY);
+    const maxAngle = Math.PI/3.2;
+    const angle = hitPos * maxAngle;
+    brick.ballVX = speed * Math.sin(angle);
+    brick.ballVY = -speed * Math.cos(angle);
+    sfxEat();
+    vibrate(10);
+  }
+
+  // bricks — handle at most one per frame to keep things simple and predictable
+  const hit = findBrickHit(x,y,r);
+  if(hit){
+    hit.alive = false;
+    brick.score += Math.max(10, (7 - hit.row) * 10);
+    brick.ballVY = -brick.ballVY;
+    sfxEat();
+    vibrate(15);
+    updateHUD();
+    if(!brick.bricks.some(b => b.alive)){
+      brick.ballX = x; brick.ballY = y;
+      return levelUp();
+    }
+  }
+
+  if(y - r > ROWS){
+    loseLife();
+    return;
+  }
+
+  brick.ballX = x;
+  brick.ballY = y;
+}
+
+function updateBrickBoy(dt){
+  const dtS = dt/1000;
+
+  if(brick.alive && !brick.paused){
+    const pSpeed = currentPaddleSpeed();
+    if(heldDirs.left) brick.paddleX -= pSpeed*dtS;
+    if(heldDirs.right) brick.paddleX += pSpeed*dtS;
+    brick.paddleX = Math.max(0, Math.min(COLS - brick.paddleW, brick.paddleX));
+  }
+
+  if(brick.stuck){
+    placeBallOnPaddle();
+  }else if(brick.started && brick.alive && !brick.paused){
+    stepBallPhysics(dtS);
+  }
+
+  renderBrickBoyFrame();
+}
+
+function renderBrickBoyFrame(){
+  if(!clearLCD()) return;
+  const styles = getComputedStyle(document.getElementById("device-screen"));
+  const fg = styles.getPropertyValue("--lcd-fg").trim() || "#2b3a20";
+  ctx.fillStyle = fg;
+
+  // bricks
+  brick.bricks.forEach(b => {
+    if(!b.alive) return;
+    const rect = brickRect(b);
+    ctx.globalAlpha = 0.62 + (6 - b.row) * 0.04;
+    roundRect(rect.x*cellSize, rect.y*cellSize, rect.w*cellSize, rect.h*cellSize, cellSize*0.1);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+
+  // paddle
+  ctx.fillStyle = fg;
+  roundRect(brick.paddleX*cellSize, brick.paddleY*cellSize, brick.paddleW*cellSize, PADDLE_H*cellSize, cellSize*0.16);
+  ctx.fill();
+
+  // ball
+  ctx.beginPath();
+  ctx.arc(brick.ballX*cellSize, brick.ballY*cellSize, BALL_R*cellSize, 0, Math.PI*2);
+  ctx.fill();
+
+  // lives, drawn as small pips in the top-left of the play field
+  for(let i=0;i<brick.lives;i++){
+    roundRect((0.5+i*0.55)*cellSize, 0.45*cellSize, 0.32*cellSize, 0.32*cellSize, cellSize*0.07);
+    ctx.fill();
+  }
+}
+
+/* ============================================================
    SECTION: GAME FLOW
    ============================================================ */
 function openGameScreen(){
-  resetGame();
+  document.getElementById("app").dataset.game = state.currentGame;
+  if(state.currentGame === "brickboy") resetBrickBoy();
+  else resetGame();
+
   showScreen("game");
   fitPixelText(document.getElementById("ov-start-title"), "READY?", document.getElementById("overlay-start").clientWidth - 40, 5.5);
+  const hint = document.getElementById("start-hint");
+  if(hint) hint.textContent = state.currentGame === "brickboy" ? "tap or press a key to launch" : "tap or press a key to start";
   document.getElementById("overlay-start").classList.remove("hidden");
   document.getElementById("overlay-pause").classList.add("hidden");
   document.getElementById("overlay-gameover").classList.add("hidden");
   requestAnimationFrame(resizeCanvas);
 }
 
+function needsLaunch(){
+  return state.currentGame === "brickboy" ? brick.stuck : !game.started;
+}
+
 function beginRun(){
-  if(game.started) return;
+  if(!needsLaunch()) return;
   document.getElementById("overlay-start").classList.add("hidden");
   document.getElementById("overlay-gameover").classList.add("hidden");
-  game.started = true;
-  game.paused = false;
-  game.tickAcc = 0;
+  if(state.currentGame === "brickboy"){
+    launchBall();
+  }else{
+    game.started = true;
+    game.paused = false;
+    game.tickAcc = 0;
+  }
   sfxStart();
 }
 
 function togglePause(){
-  if(state.screen !== "game" || !game.alive) return;
-  if(!game.started){ beginRun(); return; }
-  game.paused = !game.paused;
+  const s = activeRuntime();
+  if(state.screen !== "game" || !s.alive) return;
+  if(needsLaunch()){ beginRun(); return; }
+  s.paused = !s.paused;
   fitPixelText(document.getElementById("ov-pause-title"), "PAUSED", document.getElementById("overlay-pause").clientWidth - 40, 5.5);
-  document.getElementById("overlay-pause").classList.toggle("hidden", !game.paused);
+  document.getElementById("overlay-pause").classList.toggle("hidden", !s.paused);
   sfxKey();
 }
 
 function handlePrimaryTap(){
   if(state.screen !== "game") return;
-  if(!game.alive){ openGameScreen(); return; }
-  if(!game.started){ beginRun(); return; }
-  if(game.paused){ togglePause(); }
+  const s = activeRuntime();
+  if(!s.alive){ openGameScreen(); return; }
+  if(needsLaunch()){ beginRun(); return; }
+  if(s.paused){ togglePause(); }
 }
 
 /* ============================================================
@@ -1816,18 +2164,22 @@ const KEY_DIRS = {
   w:[0,-1], s:[0,1], a:[-1,0], d:[1,0],
   "2":[0,-1], "8":[0,1], "4":[-1,0], "6":[1,0]
 };
+const LEFT_KEYS = ["ArrowLeft","a","4"];
+const RIGHT_KEYS = ["ArrowRight","d","6"];
 
 document.addEventListener("keydown", (e) => {
   if(state.screen !== "game"){
-    if(e.key === "Enter" || e.key === " "){
-      if(state.screen === "menu"){ openGameScreen(); }
-      else if(state.screen === "boot"){ advanceFromBoot(); }
-    }
+    if((e.key === "Enter" || e.key === " ") && state.screen === "boot"){ advanceFromBoot(); }
     return;
   }
   if(e.key === " " || e.key === "Enter" || e.key === "5"){
     e.preventDefault();
     handlePrimaryTap();
+    return;
+  }
+  if(state.currentGame === "brickboy"){
+    if(LEFT_KEYS.includes(e.key)){ e.preventDefault(); heldDirs.left = true; }
+    else if(RIGHT_KEYS.includes(e.key)){ e.preventDefault(); heldDirs.right = true; }
     return;
   }
   const d = KEY_DIRS[e.key];
@@ -1838,18 +2190,33 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+document.addEventListener("keyup", (e) => {
+  if(LEFT_KEYS.includes(e.key)) heldDirs.left = false;
+  else if(RIGHT_KEYS.includes(e.key)) heldDirs.right = false;
+});
+
 // directional + center keys (shared by every shell skin and Modern Mode)
 document.querySelectorAll(".key.dir").forEach(btn => {
+  const dir = btn.dataset.dir;
   btn.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     sfxKey(); vibrate(10);
-    const dir = btn.dataset.dir;
+    if(state.screen !== "game") return;
+    if(state.currentGame === "brickboy"){
+      if(dir === "left" || dir === "right") heldDirs[dir] = true;
+      return;
+    }
     const map = { up:[0,-1], down:[0,1], left:[-1,0], right:[1,0] };
     const d = map[dir];
-    if(state.screen === "game" && game.alive){
+    if(game.alive){
       if(!game.started) beginRun();
       if(!game.paused) setNextDirection(d[0], d[1]);
     }
+  });
+  ["pointerup","pointercancel","pointerleave"].forEach(evt => {
+    btn.addEventListener(evt, () => {
+      if(dir === "left" || dir === "right") heldDirs[dir] = false;
+    });
   });
 });
 
@@ -1859,17 +2226,22 @@ document.getElementById("btn-center").addEventListener("pointerdown", (e) => {
   handlePrimaryTap();
 });
 
-// swipe support directly on the LCD viewport
+// touch input on the LCD viewport — Snake reads swipe direction / tap-to-act;
+// BrickBoy instead drags the paddle directly under the finger, which feels far
+// more natural for a paddle than discrete swipes.
 let touchStartX = 0, touchStartY = 0, touchActive = false;
 viewport.addEventListener("touchstart", (e) => {
   if(e.touches.length !== 1) return;
   touchActive = true;
   touchStartX = e.touches[0].clientX;
   touchStartY = e.touches[0].clientY;
+  if(state.currentGame === "brickboy") dragPaddleToTouch(e.touches[0]);
 }, { passive:true });
 
 viewport.addEventListener("touchmove", (e) => {
-  if(touchActive) e.preventDefault(); // stop the page from scrolling mid-swipe
+  if(!touchActive) return;
+  e.preventDefault(); // stop the page from scrolling mid-gesture
+  if(state.currentGame === "brickboy") dragPaddleToTouch(e.touches[0]);
 }, { passive:false });
 
 viewport.addEventListener("touchend", (e) => {
@@ -1879,6 +2251,12 @@ viewport.addEventListener("touchend", (e) => {
   const dx = t.clientX - touchStartX;
   const dy = t.clientY - touchStartY;
   const absX = Math.abs(dx), absY = Math.abs(dy);
+
+  if(state.currentGame === "brickboy"){
+    if(Math.max(absX,absY) < 12) handlePrimaryTap(); // a tap (not a drag) launches/pauses
+    return;
+  }
+
   if(Math.max(absX,absY) < 18){
     handlePrimaryTap();
     return;
@@ -1890,9 +2268,24 @@ viewport.addEventListener("touchend", (e) => {
   else setNextDirection(0, dy > 0 ? 1 : -1);
 });
 
+function dragPaddleToTouch(touch){
+  if(!brick.alive || brick.paused) return;
+  const rect = viewport.getBoundingClientRect();
+  const relX = (touch.clientX - rect.left) / rect.width;
+  brick.paddleX = Math.max(0, Math.min(COLS - brick.paddleW, relX*COLS - brick.paddleW/2));
+}
+
 document.getElementById("btn-restart").addEventListener("click", () => openGameScreen());
-document.getElementById("btn-play").addEventListener("click", () => { sfxKey(); openGameScreen(); });
 document.getElementById("btn-pause").addEventListener("click", togglePause);
+
+document.querySelectorAll(".game-card").forEach(card => {
+  card.addEventListener("click", () => {
+    sfxKey();
+    state.currentGame = card.dataset.game;
+    applySettingsToDOM();
+    openGameScreen();
+  });
+});
 
 // keep the page from ever scrolling/bouncing, and stop double-tap zoom on rapid taps
 document.addEventListener("touchmove", (e) => { e.preventDefault(); }, { passive:false });
@@ -1912,7 +2305,8 @@ function openDrawer(){
   document.getElementById("backdrop").classList.remove("hidden");
   document.getElementById("settings-drawer").setAttribute("aria-hidden","false");
   hideInstallBanner();
-  if(game.started && game.alive && !game.paused) togglePause();
+  const s = activeRuntime();
+  if(state.screen === "game" && s.started && s.alive && !s.paused && !needsLaunch()) togglePause();
 }
 function closeDrawer(){
   state.drawerOpen = false;
@@ -1939,6 +2333,13 @@ bindSwitch("toggle-shell", "shellOn", () => {
 bindSwitch("toggle-sound", "sound");
 bindSwitch("toggle-vibration", "vibration", () => vibrate(15));
 bindSwitch("toggle-smooth", "smooth");
+bindSwitch("toggle-wallwrap", "wallWrap");
+
+document.getElementById("btn-switch-game").addEventListener("click", () => {
+  sfxKey();
+  closeDrawer();
+  showScreen("menu");
+});
 
 document.querySelectorAll("#shell-pick-row .shell-pick").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -1965,7 +2366,7 @@ document.querySelectorAll("#speed-seg button").forEach(btn => {
     applySettingsToDOM();
     persist();
     sfxKey();
-    if(game.started) game.tickInterval = currentTickInterval();
+    if(state.currentGame === "snake" && game.started) game.tickInterval = currentTickInterval();
   });
 });
 
@@ -2007,7 +2408,9 @@ if(window.visualViewport){
 }
 
 document.addEventListener("visibilitychange", () => {
-  if(document.hidden && game.started && game.alive && !game.paused){
+  if(state.screen !== "game") return;
+  const s = activeRuntime();
+  if(document.hidden && s.started && s.alive && !s.paused && !needsLaunch()){
     togglePause();
   }
 });
