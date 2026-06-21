@@ -403,6 +403,12 @@ ul{ margin:0; padding:0; list-style:none; }
   width:100%;
   max-width:280px;
 }
+.game-card:nth-child(3){
+  grid-column:1 / -1;
+  max-width:133px;
+  margin:0 auto;
+  width:100%;
+}
 .game-card{
   display:flex; flex-direction:column; align-items:center; gap:8px;
   padding:16px 10px 14px;
@@ -725,7 +731,7 @@ ul{ margin:0; padding:0; list-style:none; }
 }
 
 /* Snake-only settings (wall wrap doesn't apply to BrickBoy Neo) */
-#app[data-game="brickboy"] .only-snake{ display:none; }
+#app:not([data-game="snake"]) .only-snake{ display:none; }
 
 /* ============================================================
    INSTALL MODAL
@@ -878,6 +884,11 @@ ul{ margin:0; padding:0; list-style:none; }
                 <div class="game-card-icon"><div class="pixel-text" id="card-brickboy-glyph"></div></div>
                 <strong>BrickBoy Neo</strong>
                 <span>Break every brick</span>
+              </button>
+              <button class="game-card" id="card-tetro" data-game="tetro">
+                <div class="game-card-icon"><div class="pixel-text" id="card-tetro-glyph"></div></div>
+                <strong>Brick Stack</strong>
+                <span>Stack and clear lines</span>
               </button>
             </div>
             <p class="menu-sub">swipe, tap or use the keys to play once you begin</p>
@@ -1112,8 +1123,8 @@ function saveSettings(s){
 const state = {
   settings: loadSettings(),
   screen: "boot",
-  currentGame: "snake",   // "snake" | "brickboy" — which game is active/selected
-  highScore: { snake: 0, brickboy: 0 },  // session-only, intentionally not persisted, kept per game
+  currentGame: "snake",   // "snake" | "brickboy" | "tetro" — which game is active/selected
+  highScore: { snake: 0, brickboy: 0, tetro: 0 },  // session-only, intentionally not persisted, kept per game
   drawerOpen: false,
   deferredInstallPrompt: null,
   isStandalone: false,
@@ -1137,8 +1148,57 @@ const BALL_R = 0.32;
 const PADDLE_H = 0.55;
 const PADDLE_W = 3;
 
-// held-direction state for BrickBoy's paddle (continuous movement while a key/button is down)
-const heldDirs = { left:false, right:false };
+// Brick Stack tuning — classic falling-blocks well, drawn at the same cell size as
+// the other two games but only using the left ten columns, with a sidebar alongside.
+const T_COLS = 10, T_ROWS = 20;
+const T_ORIGIN_X = 0, T_ORIGIN_Y = 0.5;     // where the playfield sits in shared grid units
+const T_DROP_MS = { slow: 760, normal: 620, fast: 480 };
+const T_LINE_SCORE = [0, 100, 300, 500, 800];
+
+// Standard seven tetrominoes, each as a list of rotation states; every state is four
+// [x,y] cell offsets within a small bounding box. O has one state (doesn't rotate),
+// I has two (only ever looks horizontal or vertical), the rest cycle through four.
+const PIECES = {
+  I: { states: [
+    [[0,1],[1,1],[2,1],[3,1]],
+    [[2,0],[2,1],[2,2],[2,3]]
+  ]},
+  O: { states: [
+    [[1,0],[2,0],[1,1],[2,1]]
+  ]},
+  T: { states: [
+    [[1,0],[0,1],[1,1],[2,1]],
+    [[1,0],[1,1],[2,1],[1,2]],
+    [[0,1],[1,1],[2,1],[1,2]],
+    [[1,0],[0,1],[1,1],[1,2]]
+  ]},
+  S: { states: [
+    [[1,0],[2,0],[0,1],[1,1]],
+    [[1,0],[1,1],[2,1],[2,2]]
+  ]},
+  Z: { states: [
+    [[0,0],[1,0],[1,1],[2,1]],
+    [[2,0],[1,1],[2,1],[1,2]]
+  ]},
+  J: { states: [
+    [[0,0],[0,1],[1,1],[2,1]],
+    [[1,0],[2,0],[1,1],[1,2]],
+    [[0,1],[1,1],[2,1],[2,2]],
+    [[1,0],[1,1],[0,2],[1,2]]
+  ]},
+  L: { states: [
+    [[2,0],[0,1],[1,1],[2,1]],
+    [[1,0],[1,1],[1,2],[2,2]],
+    [[0,1],[1,1],[2,1],[0,2]],
+    [[0,0],[1,0],[1,1],[1,2]]
+  ]}
+};
+const PIECE_TYPES = Object.keys(PIECES);
+const GAME_NAMES = { snake: "Snake", brickboy: "BrickBoy Neo", tetro: "Brick Stack" };
+
+// held-direction state, shared: left/right drive BrickBoy's paddle, down drives
+// Brick Stack's soft drop (continuous movement while a key/button stays down)
+const heldDirs = { left:false, right:false, down:false };
 
 /* ============================================================
    SECTION: PIXEL / DOT-MATRIX FONT (5x7) — avoids any external font file
@@ -1575,7 +1635,7 @@ function applySettingsToDOM(){
   });
 
   const nowPlaying = document.getElementById("now-playing-sub");
-  if(nowPlaying) nowPlaying.textContent = state.currentGame === "brickboy" ? "BrickBoy Neo" : "Snake";
+  if(nowPlaying) nowPlaying.textContent = GAME_NAMES[state.currentGame] || "Snake";
 }
 
 /* ============================================================
@@ -1587,6 +1647,7 @@ function runBootSequence(){
   renderPixelText(document.getElementById("boot-title"), "SNAKE");
   renderPixelText(document.getElementById("card-snake-glyph"), "S");
   renderPixelText(document.getElementById("card-brickboy-glyph"), "B");
+  renderPixelText(document.getElementById("card-tetro-glyph"), "T");
   updateClock();
   setInterval(updateClock, 15000);
 
@@ -1745,7 +1806,9 @@ function stepGame(){
 }
 
 function activeRuntime(){
-  return state.currentGame === "brickboy" ? brick : game;
+  if(state.currentGame === "brickboy") return brick;
+  if(state.currentGame === "tetro") return tetro;
+  return game;
 }
 
 function gameOver(){
@@ -1784,6 +1847,7 @@ function loop(ts){
 
   if(state.screen !== "game") return;
   if(state.currentGame === "brickboy") updateBrickBoy(dt);
+  else if(state.currentGame === "tetro") updateTetro(dt);
   else updateSnakeFrame(dt);
 }
 
@@ -1886,6 +1950,25 @@ function roundRect(x,y,w,h,r){
   ctx.arcTo(x,y+h,x,y,r);
   ctx.arcTo(x,y,x+w,y,r);
   ctx.closePath();
+}
+
+// Draws small dot-matrix text directly on the canvas, reusing the same FONT5x7 table
+// used for the DOM-based HUD/overlay text — keeps in-canvas labels (Brick Stack's
+// sidebar) visually consistent with the rest of the app without a second font.
+function drawCanvasPixelText(text, px, py, dotSize, color){
+  ctx.fillStyle = color;
+  let cursorX = px;
+  String(text).toUpperCase().split("").forEach(ch => {
+    const rows = FONT5x7[ch] || FONT5x7[" "];
+    for(let r=0;r<7;r++){
+      for(let c=0;c<5;c++){
+        if(rows[r][c] === "#"){
+          ctx.fillRect(cursorX + c*dotSize, py + r*dotSize, dotSize*0.85, dotSize*0.85);
+        }
+      }
+    }
+    cursorX += dotSize*6;
+  });
 }
 
 /* ============================================================
@@ -2103,11 +2186,238 @@ function renderBrickBoyFrame(){
 }
 
 /* ============================================================
+   SECTION: BRICK STACK — a third game, classic falling-blocks
+   ------------------------------------------------------------
+   A standard 10x20 well drawn at the same per-cell pixel size as
+   Snake and BrickBoy Neo, occupying the left part of the shared
+   canvas, with a compact sidebar (next-piece preview + lines/level)
+   filling the remaining width.
+   ============================================================ */
+const tetro = {
+  grid: [],
+  curType: null, curRot: 0, curX: 0, curY: 0,
+  nextType: null,
+  score: 0, lines: 0, level: 1,
+  alive: false, started: false, paused: false,
+  dropAcc: 0, dropInterval: T_DROP_MS.normal
+};
+
+function tetroActivePlay(){
+  return tetro.alive && tetro.started && !tetro.paused;
+}
+
+function randomPieceType(){
+  return PIECE_TYPES[Math.floor(Math.random()*PIECE_TYPES.length)];
+}
+
+function tetroCells(type, rot, x, y){
+  const states = PIECES[type].states;
+  const state = states[rot % states.length];
+  return state.map(([dx,dy]) => ({ x:x+dx, y:y+dy }));
+}
+
+function tetroCollides(type, rot, x, y){
+  const cells = tetroCells(type, rot, x, y);
+  for(let i=0;i<cells.length;i++){
+    const c = cells[i];
+    if(c.x < 0 || c.x >= T_COLS || c.y >= T_ROWS) return true;
+    if(c.y >= 0 && tetro.grid[c.y][c.x]) return true;
+  }
+  return false;
+}
+
+function currentDropInterval(){
+  const base = T_DROP_MS[state.settings.speed] || T_DROP_MS.normal;
+  const reduction = Math.min((tetro.level-1) * 35, base - 120);
+  return base - reduction;
+}
+
+function spawnPiece(){
+  tetro.curType = tetro.nextType || randomPieceType();
+  tetro.nextType = randomPieceType();
+  tetro.curRot = 0;
+  tetro.curX = 3;
+  tetro.curY = 0;
+  if(tetroCollides(tetro.curType, tetro.curRot, tetro.curX, tetro.curY)){
+    gameOver();
+  }
+}
+
+function resetTetro(){
+  tetro.grid = [];
+  for(let r=0;r<T_ROWS;r++) tetro.grid.push(new Array(T_COLS).fill(null));
+  tetro.score = 0;
+  tetro.lines = 0;
+  tetro.level = 1;
+  tetro.alive = true;
+  tetro.started = false;
+  tetro.paused = false;
+  tetro.dropAcc = 0;
+  tetro.nextType = randomPieceType();
+  spawnPiece();
+  tetro.dropInterval = currentDropInterval();
+  updateHUD();
+}
+
+function moveTetro(dx){
+  if(!tetroCollides(tetro.curType, tetro.curRot, tetro.curX+dx, tetro.curY)){
+    tetro.curX += dx;
+    sfxKey();
+  }
+}
+
+function softDropNudge(){
+  if(!tetroCollides(tetro.curType, tetro.curRot, tetro.curX, tetro.curY+1)){
+    tetro.curY += 1;
+  }
+}
+
+function rotateTetro(){
+  const states = PIECES[tetro.curType].states;
+  const nextRot = (tetro.curRot + 1) % states.length;
+  const kicks = [0, -1, 1, -2, 2];
+  for(let i=0;i<kicks.length;i++){
+    const k = kicks[i];
+    if(!tetroCollides(tetro.curType, nextRot, tetro.curX+k, tetro.curY)){
+      tetro.curRot = nextRot;
+      tetro.curX += k;
+      sfxKey();
+      vibrate(8);
+      return;
+    }
+  }
+}
+
+function lockPiece(){
+  const cells = tetroCells(tetro.curType, tetro.curRot, tetro.curX, tetro.curY);
+  cells.forEach(c => {
+    if(c.y >= 0 && c.y < T_ROWS && c.x >= 0 && c.x < T_COLS) tetro.grid[c.y][c.x] = tetro.curType;
+  });
+  sfxEat();
+  vibrate(15);
+
+  let cleared = 0;
+  for(let r = T_ROWS-1; r >= 0; r--){
+    if(tetro.grid[r].every(cell => cell)){
+      tetro.grid.splice(r,1);
+      tetro.grid.unshift(new Array(T_COLS).fill(null));
+      cleared++;
+      r++; // re-check this index — a row from above has just shifted into it
+    }
+  }
+  if(cleared > 0){
+    tetro.lines += cleared;
+    tetro.score += (T_LINE_SCORE[cleared] || 0) * tetro.level;
+    const newLevel = Math.floor(tetro.lines/10) + 1;
+    if(newLevel !== tetro.level){
+      tetro.level = newLevel;
+      showToast("Level " + tetro.level + "!");
+    }
+    tetro.dropInterval = currentDropInterval();
+    sfxStart();
+    vibrate(cleared >= 4 ? [40,30,40,30,60] : 25);
+  }
+  updateHUD();
+
+  spawnPiece();
+  tetro.dropAcc = 0;
+}
+
+function updateTetro(dt){
+  if(!tetro.started || !tetro.alive || tetro.paused){
+    renderTetroFrame();
+    return;
+  }
+  const interval = heldDirs.down ? Math.min(tetro.dropInterval, 50) : tetro.dropInterval;
+  tetro.dropAcc += dt;
+  let guard = 0;
+  while(tetro.dropAcc >= interval && guard < 20){
+    tetro.dropAcc -= interval;
+    guard++;
+    if(!tetroCollides(tetro.curType, tetro.curRot, tetro.curX, tetro.curY+1)){
+      tetro.curY += 1;
+      if(heldDirs.down){ tetro.score += 1; updateHUD(); }
+    }else{
+      lockPiece();
+      if(!tetro.alive) break;
+    }
+  }
+  renderTetroFrame();
+}
+
+function drawTetroCell(gx, gy, alpha){
+  const pad = cellSize*0.07;
+  ctx.globalAlpha = alpha;
+  roundRect(gx*cellSize+pad, gy*cellSize+pad, cellSize-pad*2, cellSize-pad*2, cellSize*0.16);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function renderTetroSidebar(fg){
+  const boxGX = T_COLS + 0.45;
+  const boxGY = T_ORIGIN_Y + 0.2;
+  const boxGSize = (COLS - T_COLS) - 0.9;
+  const boxPX = boxGX*cellSize, boxPY = boxGY*cellSize, boxPSize = boxGSize*cellSize;
+
+  ctx.strokeStyle = fg;
+  ctx.globalAlpha = 0.4;
+  ctx.lineWidth = Math.max(1, cellSize*0.05);
+  ctx.strokeRect(boxPX, boxPY, boxPSize, boxPSize);
+  ctx.globalAlpha = 1;
+
+  if(tetro.nextType){
+    const shape = PIECES[tetro.nextType].states[0];
+    const miniCell = boxPSize / 4.6;
+    const innerPad = (boxPSize - miniCell*4) / 2;
+    ctx.fillStyle = fg;
+    shape.forEach(([dx,dy]) => {
+      const pad = miniCell*0.12;
+      roundRect(boxPX+innerPad+dx*miniCell+pad, boxPY+innerPad+dy*miniCell+pad, miniCell-pad*2, miniCell-pad*2, miniCell*0.18);
+      ctx.fill();
+    });
+  }
+
+  const dot = Math.max(2, cellSize*0.15);
+  let labelY = boxPY + boxPSize + cellSize*0.7;
+  drawCanvasPixelText("LV" + tetro.level, boxPX, labelY, dot, fg);
+  labelY += dot*9;
+  drawCanvasPixelText("LN" + tetro.lines, boxPX, labelY, dot, fg);
+}
+
+function renderTetroFrame(){
+  if(!clearLCD()) return;
+  const styles = getComputedStyle(document.getElementById("device-screen"));
+  const fg = styles.getPropertyValue("--lcd-fg").trim() || "#2b3a20";
+  ctx.fillStyle = fg;
+
+  for(let r=0;r<T_ROWS;r++){
+    for(let c=0;c<T_COLS;c++){
+      if(tetro.grid[r][c]) drawTetroCell(T_ORIGIN_X+c, T_ORIGIN_Y+r, 0.85);
+    }
+  }
+
+  if(tetro.curType){
+    tetroCells(tetro.curType, tetro.curRot, tetro.curX, tetro.curY).forEach(c => {
+      if(c.y >= 0) drawTetroCell(T_ORIGIN_X+c.x, T_ORIGIN_Y+c.y, 1);
+    });
+  }
+
+  ctx.strokeStyle = fg;
+  ctx.globalAlpha = 0.35;
+  ctx.lineWidth = Math.max(1, cellSize*0.05);
+  ctx.strokeRect(T_ORIGIN_X*cellSize, T_ORIGIN_Y*cellSize, T_COLS*cellSize, T_ROWS*cellSize);
+  ctx.globalAlpha = 1;
+
+  renderTetroSidebar(fg);
+}
+
+/* ============================================================
    SECTION: GAME FLOW
    ============================================================ */
 function openGameScreen(){
   document.getElementById("app").dataset.game = state.currentGame;
   if(state.currentGame === "brickboy") resetBrickBoy();
+  else if(state.currentGame === "tetro") resetTetro();
   else resetGame();
 
   showScreen("game");
@@ -2121,7 +2431,8 @@ function openGameScreen(){
 }
 
 function needsLaunch(){
-  return state.currentGame === "brickboy" ? brick.stuck : !game.started;
+  if(state.currentGame === "brickboy") return brick.stuck;
+  return !activeRuntime().started;
 }
 
 function beginRun(){
@@ -2130,6 +2441,10 @@ function beginRun(){
   document.getElementById("overlay-gameover").classList.add("hidden");
   if(state.currentGame === "brickboy"){
     launchBall();
+  }else if(state.currentGame === "tetro"){
+    tetro.started = true;
+    tetro.paused = false;
+    tetro.dropAcc = 0;
   }else{
     game.started = true;
     game.paused = false;
@@ -2182,6 +2497,18 @@ document.addEventListener("keydown", (e) => {
     else if(RIGHT_KEYS.includes(e.key)){ e.preventDefault(); heldDirs.right = true; }
     return;
   }
+  if(state.currentGame === "tetro"){
+    const gameplayKey = LEFT_KEYS.includes(e.key) || RIGHT_KEYS.includes(e.key) ||
+      ["ArrowUp","ArrowDown","w","s","2","8"].includes(e.key);
+    if(!gameplayKey) return;
+    e.preventDefault();
+    if(!tetroActivePlay()){ handlePrimaryTap(); return; }
+    if(LEFT_KEYS.includes(e.key)) moveTetro(-1);
+    else if(RIGHT_KEYS.includes(e.key)) moveTetro(1);
+    else if(e.key === "ArrowDown" || e.key === "s" || e.key === "8") heldDirs.down = true;
+    else if(e.key === "ArrowUp" || e.key === "w" || e.key === "2") rotateTetro();
+    return;
+  }
   const d = KEY_DIRS[e.key];
   if(d){
     e.preventDefault();
@@ -2193,6 +2520,7 @@ document.addEventListener("keydown", (e) => {
 document.addEventListener("keyup", (e) => {
   if(LEFT_KEYS.includes(e.key)) heldDirs.left = false;
   else if(RIGHT_KEYS.includes(e.key)) heldDirs.right = false;
+  else if(e.key === "ArrowDown" || e.key === "s" || e.key === "8") heldDirs.down = false;
 });
 
 // directional + center keys (shared by every shell skin and Modern Mode)
@@ -2206,6 +2534,14 @@ document.querySelectorAll(".key.dir").forEach(btn => {
       if(dir === "left" || dir === "right") heldDirs[dir] = true;
       return;
     }
+    if(state.currentGame === "tetro"){
+      if(!tetroActivePlay()){ handlePrimaryTap(); return; }
+      if(dir === "left") moveTetro(-1);
+      else if(dir === "right") moveTetro(1);
+      else if(dir === "down") heldDirs.down = true;
+      else if(dir === "up") rotateTetro();
+      return;
+    }
     const map = { up:[0,-1], down:[0,1], left:[-1,0], right:[1,0] };
     const d = map[dir];
     if(game.alive){
@@ -2216,6 +2552,7 @@ document.querySelectorAll(".key.dir").forEach(btn => {
   ["pointerup","pointercancel","pointerleave"].forEach(evt => {
     btn.addEventListener(evt, () => {
       if(dir === "left" || dir === "right") heldDirs[dir] = false;
+      if(dir === "down") heldDirs.down = false;
     });
   });
 });
@@ -2223,12 +2560,17 @@ document.querySelectorAll(".key.dir").forEach(btn => {
 document.getElementById("btn-center").addEventListener("pointerdown", (e) => {
   e.preventDefault();
   sfxKey(); vibrate(10);
-  handlePrimaryTap();
+  if(state.currentGame === "tetro" && tetroActivePlay()){
+    rotateTetro();
+  }else{
+    handlePrimaryTap();
+  }
 });
 
 // touch input on the LCD viewport — Snake reads swipe direction / tap-to-act;
 // BrickBoy instead drags the paddle directly under the finger, which feels far
-// more natural for a paddle than discrete swipes.
+// more natural for a paddle than discrete swipes; Brick Stack reads swipes for
+// move/soft-drop and a plain tap to rotate (mirroring its dedicated rotate button).
 let touchStartX = 0, touchStartY = 0, touchActive = false;
 viewport.addEventListener("touchstart", (e) => {
   if(e.touches.length !== 1) return;
@@ -2254,6 +2596,17 @@ viewport.addEventListener("touchend", (e) => {
 
   if(state.currentGame === "brickboy"){
     if(Math.max(absX,absY) < 12) handlePrimaryTap(); // a tap (not a drag) launches/pauses
+    return;
+  }
+
+  if(state.currentGame === "tetro"){
+    if(Math.max(absX,absY) < 14){
+      if(tetroActivePlay()) rotateTetro(); else handlePrimaryTap();
+      return;
+    }
+    if(!tetroActivePlay()){ handlePrimaryTap(); return; }
+    if(absX > absY) moveTetro(dx > 0 ? 1 : -1);
+    else if(dy > 0) softDropNudge();
     return;
   }
 
