@@ -544,6 +544,23 @@ ul{ margin:0; padding:0; list-style:none; }
   background:rgba(0,0,0,.05);
 }
 
+/* wrap-mode pill — only visible during Snake when wallWrap is on */
+.wrap-pill{
+  display:none;
+  align-self:center;
+  margin: 0 8px 2px;
+  padding:2px 7px;
+  border-radius:20px;
+  border:1px solid var(--lcd-fg-dim);
+  font-family:var(--font-mono);
+  font-size:8px;
+  font-weight:700;
+  letter-spacing:.1em;
+  color:var(--lcd-fg-dim);
+  text-transform:uppercase;
+}
+#app[data-game="snake"][data-wallwrap="true"] .wrap-pill{ display:block; }
+
 /* ============================================================
    CONTROL PAD (D-pad / keypad — single markup, re-skinned via CSS)
    ============================================================ */
@@ -914,6 +931,8 @@ ul{ margin:0; padding:0; list-style:none; }
                 <div class="pixel-text hud-value" id="hud-high"></div>
               </div>
             </div>
+            <!-- Wrap-mode indicator: visible only when wallWrap is ON and playing Snake -->
+            <div class="wrap-pill" id="wrap-pill" aria-label="Wall-wrap mode active">↻ NO WALLS</div>
 
             <div class="lcd-viewport">
               <canvas id="game-canvas" role="img" aria-label="Snake game grid"></canvas>
@@ -1089,7 +1108,8 @@ ul{ margin:0; padding:0; list-style:none; }
 /* ============================================================
    SECTION: APP STATE
    ============================================================ */
-const STORAGE_KEY = "snakeRetroSettings_v1";
+const STORAGE_KEY = "snakeRetroSettings_v2";
+const HS_KEY = "snakeRetroHighScores_v1";
 
 const defaultSettings = {
   shellOn: true,
@@ -1109,7 +1129,6 @@ function loadSettings(){
     const parsed = JSON.parse(raw);
     return Object.assign({}, defaultSettings, parsed);
   }catch(err){
-    // localStorage may be unavailable (private mode / disabled) — fall back silently.
     return Object.assign({}, defaultSettings);
   }
 }
@@ -1117,14 +1136,31 @@ function loadSettings(){
 function saveSettings(s){
   try{
     if(window.localStorage) localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-  }catch(err){ /* storage unavailable — settings simply stay session-only */ }
+  }catch(err){ /* storage unavailable */ }
+}
+
+function loadHighScores(){
+  try{
+    const raw = window.localStorage && localStorage.getItem(HS_KEY);
+    if(!raw) return { snake: 0, brickboy: 0, tetro: 0 };
+    const parsed = JSON.parse(raw);
+    return { snake: parsed.snake || 0, brickboy: parsed.brickboy || 0, tetro: parsed.tetro || 0 };
+  }catch(err){
+    return { snake: 0, brickboy: 0, tetro: 0 };
+  }
+}
+
+function saveHighScores(){
+  try{
+    if(window.localStorage) localStorage.setItem(HS_KEY, JSON.stringify(state.highScore));
+  }catch(err){ /* storage unavailable — session-only fallback */ }
 }
 
 const state = {
   settings: loadSettings(),
   screen: "boot",
-  currentGame: "snake",   // "snake" | "brickboy" | "tetro" — which game is active/selected
-  highScore: { snake: 0, brickboy: 0, tetro: 0 },  // session-only, intentionally not persisted, kept per game
+  currentGame: "snake",   // "snake" | "brickboy" | "tetro"
+  highScore: loadHighScores(),  // persisted to localStorage
   drawerOpen: false,
   deferredInstallPrompt: null,
   isStandalone: false,
@@ -1409,8 +1445,9 @@ function registerServiceWorker(){
 // Network-first: every reload, no matter what is currently cached. Falls back to
 // the inline blob version below only when there's no real sw.js to register.
 function registerInlineServiceWorker(){
+  // Cache-first with background revalidation — matches sw.js strategy exactly.
   const swSource =
-    'const CACHE = "snake-retro-v2";' +
+    'const CACHE = "snake-retro-v3";' +
     'self.addEventListener("install", e => self.skipWaiting());' +
     'self.addEventListener("activate", e => e.waitUntil(Promise.all([' +
     '  self.clients.claim(),' +
@@ -1418,13 +1455,15 @@ function registerInlineServiceWorker(){
     '])));' +
     'self.addEventListener("fetch", e => {' +
     '  if(e.request.method !== "GET") return;' +
-    '  e.respondWith(' +
-    '    fetch(e.request).then(res => {' +
-    '      const clone = res.clone();' +
-    '      caches.open(CACHE).then(cache => cache.put(e.request, clone));' +
+    '  const url = new URL(e.request.url);' +
+    '  if(url.origin !== self.location.origin) return;' +
+    '  e.respondWith(caches.open(CACHE).then(cache => cache.match(e.request).then(cached => {' +
+    '    const net = fetch(e.request).then(res => {' +
+    '      if(res && res.status === 200) cache.put(e.request, res.clone());' +
     '      return res;' +
-    '    }).catch(() => caches.match(e.request))' +
-    '  );' +
+    '    }).catch(() => null);' +
+    '    return cached || net;' +
+    '  })));' +
     '});';
   try{
     const swURL = URL.createObjectURL(new Blob([swSource], { type:"text/javascript" }));
@@ -1645,6 +1684,7 @@ function applySettingsToDOM(){
   app.dataset.lcd = s.lcd;
   app.dataset.anim = s.smooth ? "true" : "false";
   app.dataset.game = state.currentGame;
+  app.dataset.wallwrap = s.wallWrap ? "true" : "false";
 
   document.getElementById("toggle-shell").setAttribute("aria-checked", String(s.shellOn));
   document.getElementById("toggle-sound").setAttribute("aria-checked", String(s.sound));
@@ -1791,8 +1831,12 @@ function currentTickInterval(){
 }
 
 function setNextDirection(dx, dy){
-  // ignore reversal directly into the snake's own body
-  if(game.dir.x === -dx && game.dir.y === -dy) return;
+  // Check against BOTH the current direction AND the already-queued next direction.
+  // Checking only game.dir lets a player queue a 180° reversal in two rapid presses
+  // within the same tick (e.g. Right→Left→Down: Left replaces Right in nextDir before
+  // the step fires, then Down replaces Left — neither gets the reversal guard).
+  const checkDir = (game.nextDir.x !== 0 || game.nextDir.y !== 0) ? game.nextDir : game.dir;
+  if(checkDir.x === -dx && checkDir.y === -dy) return;
   game.nextDir = { x:dx, y:dy };
 }
 
@@ -1813,7 +1857,12 @@ function stepGame(){
     return gameOver();
   }
 
-  for(let i=0;i<game.snake.length;i++){
+  // Bug fix: exclude the last tail cell from self-collision check.
+  // When the snake isn't eating, the tail vacates its cell this same step —
+  // so the new head can legally land there. Checking all snake.length cells
+  // caused the snake to die one cell too early near its own tail.
+  const checkLen = game.snake.length - 1;
+  for(let i = 0; i < checkLen; i++){
     if(game.snake[i].x === newHead.x && game.snake[i].y === newHead.y) return gameOver();
   }
 
@@ -1847,6 +1896,7 @@ function gameOver(){
   vibrate([60,40,60]);
   if(s.score > state.highScore[state.currentGame]){
     state.highScore[state.currentGame] = s.score;
+    saveHighScores();
   }
   const overW = document.getElementById("overlay-gameover").clientWidth - 40;
   fitPixelText(document.getElementById("ov-over-title"), "GAME OVER", overW, 6);
@@ -2443,7 +2493,9 @@ function renderTetroFrame(){
    SECTION: GAME FLOW
    ============================================================ */
 function openGameScreen(){
-  document.getElementById("app").dataset.game = state.currentGame;
+  const app = document.getElementById("app");
+  app.dataset.game = state.currentGame;
+  app.dataset.wallwrap = state.settings.wallWrap ? "true" : "false";
   if(state.currentGame === "brickboy") resetBrickBoy();
   else if(state.currentGame === "tetro") resetTetro();
   else resetGame();
@@ -2643,6 +2695,9 @@ viewport.addEventListener("touchend", (e) => {
     return;
   }
   if(!game.alive){ openGameScreen(); return; }
+  // A swipe on the pre-start overlay begins the run AND queues the swiped direction
+  // simultaneously — so the snake doesn't start moving right (its default) for one
+  // tick before registering what the player intended.
   if(!game.started) beginRun();
   if(game.paused) return;
   if(absX > absY) setNextDirection(dx > 0 ? 1 : -1, 0);
@@ -2714,7 +2769,9 @@ bindSwitch("toggle-shell", "shellOn", () => {
 bindSwitch("toggle-sound", "sound");
 bindSwitch("toggle-vibration", "vibration", () => vibrate(15));
 bindSwitch("toggle-smooth", "smooth");
-bindSwitch("toggle-wallwrap", "wallWrap");
+bindSwitch("toggle-wallwrap", "wallWrap", () => {
+  document.getElementById("app").dataset.wallwrap = state.settings.wallWrap ? "true" : "false";
+});
 
 document.getElementById("btn-switch-game").addEventListener("click", () => {
   sfxKey();
