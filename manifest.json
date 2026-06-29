@@ -1,7 +1,7 @@
 {
-  "name": "Snake: Retro Reimagined",
-  "short_name": "Snake",
-  "description": "A retro Nokia-inspired Snake game, reimagined for modern phones.",
+  "name": "Retro Pocket",
+  "short_name": "Retro Pocket",
+  "description": "Five classic retro arcade games in one pocket app — Snake, Breakout, Tetris, Pong, Frogger. Reimagined for modern phones.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -9,8 +9,23 @@
   "background_color": "#10140f",
   "theme_color": "#10140f",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
