@@ -478,6 +478,12 @@ ul{ margin:0; padding:0; list-style:none; }
 
 .lcd-viewport{
   position:relative;
+  /* This box fills 100% of its available flex space on both axes — genuinely
+     edge to edge, guaranteed by the browser's own flex layout, not by JS
+     math that could drift out of sync. The canvas inside sizes itself to the
+     best-fit integer-cell grid and centers within this box (see #game-canvas
+     below) — since both share the same lcd-bg-deep tone, any small leftover
+     margin is invisible and the whole box reads as one continuous screen. */
   flex:1 1 auto;
   min-height:0;
   margin:2px 10px 10px;
@@ -485,13 +491,12 @@ ul{ margin:0; padding:0; list-style:none; }
   overflow:hidden;
   background:var(--lcd-bg-deep);
   box-shadow:inset 0 0 0 1px var(--lcd-grid), inset 0 2px 10px rgba(0,0,0,.18);
-  aspect-ratio: 15 / 21;
-  align-self:center;
   width:100%;
 }
 #game-canvas{
-  position:absolute; inset:0;
-  width:100%; height:100%;
+  position:absolute;
+  top:50%; left:50%;
+  transform:translate(-50%,-50%);
   display:block;
   image-rendering:pixelated;
   image-rendering:crisp-edges;
@@ -1784,48 +1789,36 @@ let cellSize = 16;
 // height-constrained (short viewports, tall keypads) — so we compute the exact
 // pixel box ourselves: the largest COLS:ROWS rectangle that fits the space left
 // after the HUD row, rather than trusting the browser to preserve the ratio.
-function fitGameViewport(){
-  const screenGame = document.getElementById("screen-game");
-  const hud = document.querySelector(".lcd-hud");
-  if(!screenGame || !hud) return;
-  const styles = getComputedStyle(viewport);
-  const marginV = parseFloat(styles.marginTop) + parseFloat(styles.marginBottom);
-  const marginH = parseFloat(styles.marginLeft) + parseFloat(styles.marginRight);
-  const availW = screenGame.clientWidth - marginH;
-  const availH = screenGame.clientHeight - hud.offsetHeight - marginV;
-  if(availW <= 0 || availH <= 0) return;
-  const ratio = COLS / ROWS;
-  let w, h;
-  if(availW / availH > ratio){ h = availH; w = h * ratio; }
-  else{ w = availW; h = w / ratio; }
-  viewport.style.width = Math.floor(w) + "px";
-  viewport.style.height = Math.floor(h) + "px";
-}
-
+// .lcd-viewport fills 100% of its available space via pure CSS (flex-grow +
+// width:100%) — genuinely edge to edge on every side, guaranteed by the
+// browser's layout engine rather than JS arithmetic that could drift out of
+// sync with it. This function only has to size the CANVAS: the largest
+// integer-cell grid that fits inside the box's actual rendered dimensions.
+// The canvas centers itself within the box via CSS (position:absolute +
+// transform), so any small leftover margin is just more of the box's own
+// lcd-bg-deep background — invisible, since clearLCD() paints the canvas
+// the same tone — and the whole box reads as one continuous, edge-to-edge
+// screen with no visible seam.
 function resizeCanvas(){
-  fitGameViewport();
-  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
   const w = viewport.clientWidth;
   const h = viewport.clientHeight;
   if(w === 0 || h === 0) return;
 
-  // Derive an integer cell size so every cell is pixel-perfect — no fractional
-  // widths that would blur the grid lines or shift segments out of alignment.
-  // Floor to the largest whole number of logical pixels that fits both axes,
-  // then scale by dpr for the actual physical canvas backing buffer.
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+
+  // Largest whole logical pixel that fits both axes while preserving the
+  // COLS:ROWS aspect ratio — this is what keeps every cell pixel-perfect.
   const logicalCell = Math.floor(Math.min(w / COLS, h / ROWS));
   if(logicalCell < 8) return; // too small to render meaningfully
-  cellSize = logicalCell * dpr;
 
-  // Set the canvas backing buffer to exactly COLS×ROWS integer cells.
-  // This avoids any fractional-pixel remainder at the right/bottom edges.
+  const logicalW = logicalCell * COLS;
+  const logicalH = logicalCell * ROWS;
+
+  cellSize = logicalCell * dpr;
   canvas.width  = Math.round(cellSize * COLS);
   canvas.height = Math.round(cellSize * ROWS);
-
-  // Keep the CSS display size at the logical dimensions so the canvas doesn't
-  // appear blown up — the dpr scaling is only in the backing buffer.
-  canvas.style.width  = (logicalCell * COLS) + "px";
-  canvas.style.height = (logicalCell * ROWS) + "px";
+  canvas.style.width  = logicalW + "px";
+  canvas.style.height = logicalH + "px";
 
   renderFrame(1);
 }
@@ -3316,14 +3309,17 @@ viewport.addEventListener("touchend", (e) => {
 
 function dragPaddleToTouch(touch){
   if(!brick.alive || brick.paused) return;
-  const rect = viewport.getBoundingClientRect();
+  // Use the canvas's own rect, not the outer box's — the box can be a few
+  // pixels larger than the canvas (letterboxed to keep cells pixel-perfect),
+  // so mapping against the canvas keeps the paddle tracking the finger exactly.
+  const rect = canvas.getBoundingClientRect();
   const relX = (touch.clientX - rect.left) / rect.width;
   brick.paddleX = Math.max(0, Math.min(COLS - brick.paddleW, relX*COLS - brick.paddleW/2));
 }
 
 function dragPongToTouch(touch){
   if(!pong.alive || pong.paused) return;
-  const rect = viewport.getBoundingClientRect();
+  const rect = canvas.getBoundingClientRect();
   const relY = (touch.clientY - rect.top) / rect.height;
   pong.playerY = Math.max(0, Math.min(ROWS - pong.paddleH, relY * ROWS - pong.paddleH/2));
 }
