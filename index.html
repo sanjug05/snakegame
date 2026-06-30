@@ -3336,12 +3336,22 @@ document.querySelectorAll(".game-card").forEach(card => {
   });
 });
 
-// keep the page from ever scrolling/bouncing, and stop double-tap zoom on rapid taps
-document.addEventListener("touchmove", (e) => { e.preventDefault(); }, { passive:false });
+// Keep the page from ever scrolling/bouncing during gameplay — but exempt
+// genuinely scrollable UI (the settings drawer's content, and the horizontal
+// shell-face picker inside it). Without this exception, preventDefault() here
+// cancels the native scroll/swipe gesture for the ENTIRE page before the
+// browser ever gets a chance to apply it — including inside elements that
+// have overflow:auto set correctly in CSS. The CSS alone was never the
+// problem; this blanket handler silently overrides it everywhere.
+const SCROLLABLE_SELECTOR = ".drawer-content, .shell-pick-row";
+document.addEventListener("touchmove", (e) => {
+  if(e.target.closest(SCROLLABLE_SELECTOR)) return; // let the browser scroll it natively
+  e.preventDefault();
+}, { passive:false });
 let lastTouchEnd = 0;
 document.addEventListener("touchend", (e) => {
   const now = Date.now();
-  if(now - lastTouchEnd < 320) e.preventDefault();
+  if(now - lastTouchEnd < 320 && !e.target.closest(SCROLLABLE_SELECTOR)) e.preventDefault();
   lastTouchEnd = now;
 }, false);
 
